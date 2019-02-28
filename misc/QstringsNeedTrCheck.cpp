@@ -17,18 +17,43 @@ namespace tidy {
 namespace misc {
 
 void QstringsNeedTrCheck::registerMatchers(MatchFinder *Finder) {
+ if(!getLangOpts().CPlusPlus)
+ {
+	 return;
+ }
+ auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString")))).bind("constructor");
+
   // FIXME: Add matchers.
-  Finder->addMatcher(functionDecl().bind("x"), this);
+  Finder->addMatcher(constructor, this);
 }
 
 void QstringsNeedTrCheck::check(const MatchFinder::MatchResult &Result) {
-  // FIXME: Add callback implementation.
-  const auto *MatchedDecl = Result.Nodes.getNodeAs<FunctionDecl>("x");
-  if (MatchedDecl->getName().startswith("awesome_"))
-    return;
-  diag(MatchedDecl->getLocation(), "function %0 is insufficiently awesome")
-      << MatchedDecl
-      << FixItHint::CreateInsertion(MatchedDecl->getLocation(), "awesome_");
+
+      
+	const auto *matchedConstructor = Result.Nodes.getNodeAs<CXXConstructExpr>("constructor");
+
+	if(matchedConstructor)
+	{
+		SourceLocation loc = matchedConstructor->getBeginLoc();
+
+		// if the constructor had a tr() call inside then there is nothing to do
+		// TODO: Not sure how to write that :)
+		// if( has a tr() 
+		//    return
+	
+		diag(loc, "QString should have a tr() to ensure it is translated");
+
+      	//	<< matchedConstructor
+      	//	<< FixItHint::CreateInsertion(matchedConstructor->getLocation(), "tr()");
+	}
+
+	// FIXME: Add callback implementation.
+//  const auto *MatchedDecl = Result.Nodes.getNodeAs<FunctionDecl>("x");
+//  if (MatchedDecl->getName().startswith("awesome_"))
+//    return;
+//  diag(MatchedDecl->getLocation(), "function %0 is insufficiently awesome")
+//      << MatchedDecl
+//      << FixItHint::CreateInsertion(MatchedDecl->getLocation(), "awesome_");
 }
 
 } // namespace misc
