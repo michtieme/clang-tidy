@@ -24,40 +24,36 @@ void QstringsNeedTrCheck::registerMatchers(MatchFinder *Finder) {
 	 return;
   }
 
-  std::cout << "QStringsNeedTrCheck::registering Matchers" << "\n";
-
-//  auto cxWithTr = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("tr")))))))).bind("cxWithTr");
-//  auto cxWithNoTr = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("no_tr")))))))).bind("cxWithNoTr");
-//  auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString")))).bind("constructor");
-
-  auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), 
-		  unless(anyOf(hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("tr"))))))),
-		               hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("no_tr")))))))
-			  )))
-	  .bind("constructor");
+ auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), 
+		 		     hasArgument(0, stringLiteral().bind("lit")),
+				     unless(anyOf(hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("tr"))))))), 
+						  hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("no_tr")))))))))).bind("constructor");
 
   Finder->addMatcher(constructor, this);
 }
 
 void QstringsNeedTrCheck::check(const MatchFinder::MatchResult &Result) {
 
-	const auto *matchedConstructor = Result.Nodes.getNodeAs<CXXConstructExpr>("constructor");
+	const auto *matchedConstructor = Result.Nodes.getNodeAs<StringLiteral>("lit");
 
-	//Produce diagnostic if we have a QString constructor match that is not wrapped in a tr(), or a no_tr()
+	if(matchedConstructor->getBeginLoc().isMacroID())
+		return;
+
+	//Produce diagnostic if we have a QString constructor match ,with a string literal, that is not wrapped in a tr(), or a no_tr()
 	if(matchedConstructor)
 	{
+		const StringRef bytes = matchedConstructor->getBytes();
+		std::string Replacement = (R"(tr(")" + bytes + R"("))").str();
+
+		CharSourceRange CharRange = Lexer::makeFileCharRange(
+			CharSourceRange::getTokenRange(matchedConstructor->getSourceRange()),
+			*Result.SourceManager, 
+			getLangOpts());
+
 		SourceLocation loc = matchedConstructor->getBeginLoc();
 		diag(loc, "QString should have a tr() to ensure it is translated")
-      		<< FixItHint::CreateInsertion(matchedConstructor->getLocation(), "tr()");
+		<< FixItHint::CreateReplacement(CharRange, Replacement);
 	}
-
-	// FIXME: Add callback implementation.
-//  const auto *MatchedDecl = Result.Nodes.getNodeAs<FunctionDecl>("x");
-//  if (MatchedDecl->getName().startswith("awesome_"))
-//    return;
-//  diag(MatchedDecl->getLocation(), "function %0 is insufficiently awesome")
-//      << MatchedDecl
-//      << FixItHint::CreateInsertion(MatchedDecl->getLocation(), "awesome_");
 }
 
 } // namespace misc
