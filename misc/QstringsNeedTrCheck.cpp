@@ -10,6 +10,8 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
+#include <iostream>
+
 using namespace clang::ast_matchers;
 
 namespace clang {
@@ -17,34 +19,36 @@ namespace tidy {
 namespace misc {
 
 void QstringsNeedTrCheck::registerMatchers(MatchFinder *Finder) {
- if(!getLangOpts().CPlusPlus)
- {
+  if(!getLangOpts().CPlusPlus)
+  {
 	 return;
- }
- auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString")))).bind("constructor");
+  }
 
-  // FIXME: Add matchers.
+  std::cout << "QStringsNeedTrCheck::registering Matchers" << "\n";
+
+//  auto cxWithTr = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("tr")))))))).bind("cxWithTr");
+//  auto cxWithNoTr = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("no_tr")))))))).bind("cxWithNoTr");
+//  auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString")))).bind("constructor");
+
+  auto constructor = cxxConstructExpr(hasDeclaration(cxxMethodDecl(hasName("QString"))), 
+		  unless(anyOf(hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("tr"))))))),
+		               hasArgument(0, callExpr(hasDescendant(declRefExpr(to(functionDecl(hasName("no_tr")))))))
+			  )))
+	  .bind("constructor");
+
   Finder->addMatcher(constructor, this);
 }
 
 void QstringsNeedTrCheck::check(const MatchFinder::MatchResult &Result) {
 
-      
 	const auto *matchedConstructor = Result.Nodes.getNodeAs<CXXConstructExpr>("constructor");
 
+	//Produce diagnostic if we have a QString constructor match that is not wrapped in a tr(), or a no_tr()
 	if(matchedConstructor)
 	{
 		SourceLocation loc = matchedConstructor->getBeginLoc();
-
-		// if the constructor had a tr() call inside then there is nothing to do
-		// TODO: Not sure how to write that :)
-		// if( has a tr() 
-		//    return
-	
-		diag(loc, "QString should have a tr() to ensure it is translated");
-
-      	//	<< matchedConstructor
-      	//	<< FixItHint::CreateInsertion(matchedConstructor->getLocation(), "tr()");
+		diag(loc, "QString should have a tr() to ensure it is translated")
+      		<< FixItHint::CreateInsertion(matchedConstructor->getLocation(), "tr()");
 	}
 
 	// FIXME: Add callback implementation.
